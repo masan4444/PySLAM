@@ -31,10 +31,10 @@ def rotation_matrix(robot_r):
 
 
 def sensor2robot(distance, angle):
-    return (distance * np.array([ \
-            np.cos(angle - SENSOR_OFFSET), \
-            np.sin(angle - SENSOR_OFFSET)  \
-        ])).T
+    return (distance * np.array([
+            np.cos(angle - SENSOR_OFFSET),
+            np.sin(angle - SENSOR_OFFSET)
+            ])).T
 
 
 def robot2map(r, robot_r):
@@ -48,11 +48,6 @@ def sensor2map(distance, angle, robot_r):
 
 
 # for fixed point
-# def sensor2robot_fxp(distance, angle):
-#     return (distance * np.array([ \
-#             np.cos(angle - SENSOR_OFFSET), \
-#             np.sin(angle - SENSOR_OFFSET)  \
-#         ])).T
 def rotation_matrix_fxp(robot_r, n_word=None, n_int=None):
     theta = robot_r[..., 2]()
     robot_rotation = np.array([
@@ -62,10 +57,10 @@ def rotation_matrix_fxp(robot_r, n_word=None, n_int=None):
     return Fxp(robot_rotation, n_word=n_word, n_int=n_int)
 
 
-def robot2map_fxp(r, robot_r):
-    robot_rotation = rotation_matrix_fxp(robot_r, n_word=16, n_int=1)
+def robot2map_fxp(r, robot_r, n_word=None, n_int=None):
+    robot_rotation = rotation_matrix_fxp(robot_r, n_word=n_word, n_int=2)
     rotated = npf.matmul(r, robot_rotation)
-    rotated = npf.format(rotated, n_word=16, n_int=3)
+    rotated = npf.format(rotated, n_word=n_word, n_int=n_int)
     return rotated + robot_r[..., np.newaxis, 0:2]
 
 

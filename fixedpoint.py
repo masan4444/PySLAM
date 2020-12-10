@@ -1,4 +1,6 @@
 # %%
+%reset
+
 import numpy as np
 from fxpmath import Fxp
 from fxpmath import sum as sumf
@@ -9,48 +11,36 @@ import utility as util
 import numpyFxp as npf
 
 %load_ext autoreload
-
-
-# %%
 %autoreload
 
-
-def info(n_word, n_frac):
-    print(Fxp(None, True, n_word, n_frac).info(verbose=3))
-
-
-# class MyFxp(Fxp):
-#     def __init__(self, *args, **kwords):
-#         super(MyFxp, self).__init__(*args, **kwords)
-#         self.ndim = self().ndim
-#         self.shape = self().shape
-
-
-# %%
-%autoreload
+n_word = 8
 
 
 def closest_points_index_fxp(sensor_r, robot_r, reference_scan):
-    scan = coord.robot2map_fxp(sensor_r, robot_r)
-    euclidean_distance = np.linalg.norm((scan[..., np.newaxis, :, :] - reference_scan[..., np.newaxis, :])(), axis=-1)
+    scan = coord.robot2map_fxp(sensor_r, robot_r, n_word=n_word, n_int=3)
+    euclidean_distance = np.linalg.norm(
+        (scan[..., np.newaxis, :, :] - reference_scan[..., np.newaxis, :])(),
+        axis=-1
+    )
     return np.argmin(euclidean_distance, axis=-2)
 
 
 def cost_function_fxp(scan, robot_r, reference_scan):
-    current_scan = coord.robot2map_fxp(scan, robot_r)
-    cost = npf.square_sum(current_scan - reference_scan) / Fxp(reference_scan().shape[:-1])
-    cost = npf.format(cost, n_word=16, n_int=1)
+    current_scan = coord.robot2map_fxp(scan, robot_r, n_word=n_word, n_int=3)
+    cost = npf.square_sum(current_scan - reference_scan) / \
+        Fxp(reference_scan().shape[:-1], n_word=n_word, n_int=5)
+    cost = npf.format(cost, n_word=n_word, n_int=1)
     # print('cost: {}', cost.dtype)
     return cost
 
 
 def differential_fxp(scan, robot_r, reference_scan):
-    robot_rotation = coord.rotation_matrix_fxp(robot_r, n_word=16, n_int=1)
-    print(robot_rotation.dtype)
+    robot_rotation = coord.rotation_matrix_fxp(robot_r, n_word=n_word, n_int=1)
+    # print(robot_rotation.dtype)
     rotated_scan = npf.matmul(scan, robot_rotation)
-    rotated_scan = npf.format(rotated_scan, n_word=16, n_int=3)
+    rotated_scan = npf.format(rotated_scan, n_word=n_word, n_int=3)
     linear_trans_vector = robot_r[..., np.newaxis, 0:2] - reference_scan[..., 0:2]
-    linear_trans_vector = npf.format(linear_trans_vector, n_word=16, n_int=3)
+    linear_trans_vector = npf.format(linear_trans_vector, n_word=n_word, n_int=3)
 
     # print(rotated_scan.info())
     # print(linear_trans_vector.dtype)
@@ -60,7 +50,7 @@ def differential_fxp(scan, robot_r, reference_scan):
     # dxy = Fxp(dxy).like(Fxp(None, n_word=32, n_frac=28))
     # dt = Fxp(dt).like(Fxp(None, n_word=32, n_frac=28))
     d = npf.concatenate([dxy, dt[..., np.newaxis]], -1)
-    d = npf.format(d, n_word=16, n_int=0)
+    d = npf.format(d, n_word=n_word, n_int=0)
     # print('d: {}', d.dtype)
     return npf.sum(d, axis=-2) / Fxp(reference_scan().shape[:-1])
 
@@ -68,9 +58,9 @@ def differential_fxp(scan, robot_r, reference_scan):
 def optimize_fxp(scan, robot_r, reference_scan, closest_index):
     _k = 0.1
     # _k = 0.1
-    k = Fxp([_k, _k, _k / 10], n_word=16, n_int=1)
+    k = Fxp([_k, _k, _k / 10], n_word=n_word, n_int=1)
 
-    cost_min = Fxp(9999, n_word=16)
+    cost_min = Fxp(9999, n_word=n_word)
     cost_old = cost_function_fxp(scan, robot_r, reference_scan[closest_index])
     print(cost_old)
     robot_r_best = robot_r
@@ -78,9 +68,9 @@ def optimize_fxp(scan, robot_r, reference_scan, closest_index):
     while True:
         dd = differential_fxp(scan, robot_r, reference_scan[closest_index])
         print(dd)
-        dd = npf.format(dd, n_word=16, n_int=3)
+        dd = npf.format(dd, n_word=n_word, n_int=3)
         robot_r = robot_r - k * dd
-        robot_r = npf.format(robot_r, n_word=16, n_int=3)
+        robot_r = npf.format(robot_r, n_word=n_word, n_int=3)
         cost_new = cost_function_fxp(scan, robot_r, reference_scan[closest_index])
         count += 1
         # print(cost_old - cost_new)
@@ -99,7 +89,7 @@ def optimize_fxp(scan, robot_r, reference_scan, closest_index):
 
 
 def icp_fxp(scan, robot_r, reference_scan):
-    cost_min = Fxp(9999, n_word=16)
+    cost_min = Fxp(9999, n_word=n_word)
     cost_old = cost_min
     robot_r_best = robot_r
 
@@ -110,7 +100,11 @@ def icp_fxp(scan, robot_r, reference_scan):
         # print(icp_count)
         closest_index = closest_points_index_fxp(scan, robot_r, reference_scan)
 
-        robot_r, cost_new, optimize_count = optimize_fxp(scan, robot_r, reference_scan, closest_index)
+        robot_r, cost_new, optimize_count = optimize_fxp(
+            scan, robot_r,
+            reference_scan,
+            closest_index
+        )
         if cost_min > cost_new:
             cost_min = cost_new
             robot_r_best = robot_r
@@ -144,26 +138,25 @@ def padding(counts):
     counts = list(map(lambda x: x + [0] * (ll - len(x)), counts))
     return np.array(counts)
 
-%autoreload
+
 odometries, sensor_rs = util.read_lsc_file(filepath="dataset/circle2.lsc")
-odometries = Fxp(odometries, n_word=16, n_int=3)
-sensor_rs = [Fxp(sensor_r, n_word=16, n_int=3) for sensor_r in sensor_rs]
-# xy_odometries = np.round(scale * odometries[..., :2])
-# odometries = np.concatenate([xy_odometries, odometries[..., np.newaxis, 2]], axis=-1).astype(np.int32)
-# sensor_rs = [np.round(scale * sensor_r).astype(np.int32) for sensor_r in sensor_rs]
+odometries = Fxp(odometries, n_word=n_word, n_int=3)
+sensor_rs = [Fxp(sensor_r, n_word=n_word, n_int=3) for sensor_r in sensor_rs]
 
-
-%autoreload
 robot_rs = []
 reference_scans = []
 optimize_counts = []
 start_i = 0
-reference_scan = coord.robot2map_fxp(sensor_rs[start_i], odometries[start_i])
+reference_scan = coord.robot2map_fxp(
+    sensor_rs[start_i],
+    odometries[start_i],
+    n_word=n_word, n_int=3
+)
 sub = plt.subplot()
 sub.set_aspect('equal')
 sub.set_xlabel('x')
 sub.set_ylabel('y')
-# plot_scan(sub, sensor_rs[start_i](), odometries[start_i](), s=1)
+plot_scan(sub, reference_scan(), odometries[start_i](), s=1)
 
 
 # for i, (odometory, sensor_r) in enumerate(zip(odometries[start_i + 1:], sensor_rs[start_i + 1:])):
@@ -176,7 +169,7 @@ sub.set_ylabel('y')
 #     optimize_counts.append(optimize_count)
 #     # print(robot_r)
 #     print(i, np.sum(optimize_count), optimize_count)
-#     reference_scan = coord.robot2map_fxp(sensor_r, robot_r)
+#     reference_scan = coord.robot2map_fxp(sensor_r, robot_r, n_word=n_word, n_int=3)
 
 #     # if i % 100 == 0:
 #     #     plot_scan(sub, reference_scan, robot_r, s=1)
@@ -185,15 +178,16 @@ sub.set_ylabel('y')
 
 # np.array(reference_scans).shape
 
-
 odometory = odometries[start_i]
-sensor_r = coord.robot2map_fxp(sensor_rs[start_i], Fxp([0.1, 0.1, np.pi/8], n_word=16, n_int=3))
+sensor_r = coord.robot2map_fxp(
+    reference_scan,
+    Fxp([0.1, 0.1, np.pi / 8], n_word=16, n_int=3),
+    n_word=16, n_int=3
+)
 plot_scan(sub, sensor_r(), odometory(), s=1)
 robot_r, icp_count, optimize_count = icp_fxp(sensor_r, odometory, reference_scan)
 robot_rs.append(robot_r)
 optimize_counts.append(optimize_count)
 print(np.sum(optimize_count), optimize_count)
-reference_scan = coord.robot2map_fxp(sensor_r, robot_r)
+reference_scan = coord.robot2map_fxp(sensor_r, robot_r, n_word=n_word, n_int=3)
 plot_scan(sub, reference_scan(), robot_r(), s=1)
-
-# # reference_scans.append(reference_scan)
